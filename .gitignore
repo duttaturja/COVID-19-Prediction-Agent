@@ -1,5 +1,7 @@
 .venv/
-*.zip
+*.zip*
 COVID-19_Radiography_Dataset
-prepared_data/
+images/
 *.pth
+uv.lock
+.kaggle/

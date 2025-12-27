@@ -1,0 +1,33 @@
+[project]
+name = "covid-19-prediction-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "ipykernel>=7.1.0",
+    "ipython>=9.6.0",
+    "ipywidgets>=8.1.7",
+    "kagglehub>=0.3.13",
+    "matplotlib>=3.10.7",
+    "notebook>=7.4.7",
+    "opencv-python>=4.12.0.88",
+    "pandas>=2.3.3",
+    "rich>=14.2.0",
+    "scikit-learn>=1.7.2",
+    "torch>=2.9.0",
+    "torchsummary>=1.5.1",
+    "torchvision>=0.24.0",
+    "tqdm>=4.67.1",
+    "streamlit>=1.32.0",
+    "pillow>=10.2.0",
+    "seaborn>=0.13.0",
+]
+
+[tool]
+
+[tool.pyrefly]
+project-includes = [
+    "**/*.py*",
+    "**/*.ipynb",
+]
