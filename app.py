@@ -417,10 +417,10 @@ def process_image(image):
                 predicted_class = 0 # COVID
                 confidence = 1 - probability
         
-        return predicted_class, confidence * 100
+        return predicted_class, confidence * 100, image_tensor[0]
     except Exception as e:
         st.error(f"Error during prediction: {str(e)}")
-        return None, 0
+        return None, 0, None
 
 def main():
     # Sidebar content
@@ -518,58 +518,73 @@ def main():
 
     if image_source:
         try:
+            with st.spinner("Analyzing X-ray..."):
+                # Process image and get prediction
+                predicted_class, confidence, transformed_tensor = process_image(image_source)
+            
+            if predicted_class is None:
+                st.stop()
+                
             # Create two columns for image and results
             col1, col2 = st.columns([1, 1], gap="medium")
             
             with col1:
-                # Display image with timestamp
+                # Display images in tabs
+                tab1, tab2 = st.tabs(["Original X-Ray", "Processed Input"])
+                
                 image = Image.open(image_source)
-                st.image(
-                    image, 
-                    caption=f"{'Captured' if input_method == 'Use Camera' else 'Uploaded'} X-Ray ({time.strftime('%H:%M:%S')})", 
-                    width="stretch"
-                )
+                with tab1:
+                    st.image(
+                        image, 
+                        caption=f"{'Captured' if input_method == 'Use Camera' else 'Uploaded'} X-Ray ({time.strftime('%H:%M:%S')})", 
+                        width="stretch"
+                    )
+                
+                with tab2:
+                    if transformed_tensor is not None:
+                        # Convert tensor to PIL Image for display
+                        # Transform creates a float tensor [0,1], need to scale for visibility if needed, 
+                        # but ToPILImage handles float tensors [0,1] correctly.
+                        trans_img = transforms.ToPILImage()(transformed_tensor)
+                        st.image(
+                            trans_img,
+                            caption=f"Clahe + Resized ({trans_img.size})",
+                            width="stretch"
+                        )
             
             with col2:
-                with st.spinner("Analyzing X-ray..."):
-                    # Process image and get prediction
-                    predicted_class, confidence = process_image(image_source)
+                # Create result container with custom styling
+                result_container = st.container()
+                
+                with result_container:
+                    st.subheader("Analysis Results")
                     
-                    if predicted_class is None:
-                        st.stop()
-                        
-                    # Create result container with custom styling
-                    result_container = st.container()
+                    # Display prediction with appropriate styling
+                    if predicted_class == 1:  # Normal case
+                        st.success("✅ Normal X-Ray")
+                        recommendation = "No COVID-19 indicators detected in the X-ray image"
+                        status_color = "green"
+                    else:  # COVID case
+                        st.error("⚠️ COVID-19 Indicators Detected")
+                        recommendation = "Please seek immediate medical attention and consult a healthcare professional"
+                        status_color = "red"
                     
-                    with result_container:
-                        st.subheader("Analysis Results")
-                        
-                        # Display prediction with appropriate styling
-                        if predicted_class == 1:  # Normal case
-                            st.success("✅ Normal X-Ray")
-                            recommendation = "No COVID-19 indicators detected in the X-ray image"
-                            status_color = "green"
-                        else:  # COVID case
-                            st.error("⚠️ COVID-19 Indicators Detected")
-                            recommendation = "Please seek immediate medical attention and consult a healthcare professional"
-                            status_color = "red"
-                        
-                        # Show confidence with progress bar
-                        st.markdown(f"**Confidence Score:** {confidence:.1f}%")
-                        st.progress(confidence/100)
-                        
-                        # Show recommendation
-                        st.info(recommendation)
-                        
-                        # Additional details
-                        with st.expander("🔍 Detailed Analysis"):
-                            st.markdown(f"""
-                            - **Classification**: {"Normal" if predicted_class == 1 else "COVID-19"}
-                            - **Confidence**: {confidence:.1f}%
-                            - **Model Version**: v1.0
-                            - **Image Size**: {image.size}
-                            - **Analysis Time**: {time.strftime('%H:%M:%S')}
-                            """)
+                    # Show confidence with progress bar
+                    st.markdown(f"**Confidence Score:** {confidence:.1f}%")
+                    st.progress(confidence/100)
+                    
+                    # Show recommendation
+                    st.info(recommendation)
+                    
+                    # Additional details
+                    with st.expander("🔍 Detailed Analysis"):
+                        st.markdown(f"""
+                        - **Classification**: {"Normal" if predicted_class == 1 else "COVID-19"}
+                        - **Confidence**: {confidence:.1f}%
+                        - **Model Version**: v1.0
+                        - **Image Size**: {image.size}
+                        - **Analysis Time**: {time.strftime('%H:%M:%S')}
+                        """)
 
         except Exception as e:
             st.error(f"Error processing image: {str(e)}")
