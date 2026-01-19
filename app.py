@@ -15,14 +15,15 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
-        'Get Help': 'https://github.com/Sayemahamed/AI-Lab-Project',
-        'Report a bug': "mailto:sayemahamed183@gmail.com",
-        'About': "# COVID-19 X-Ray Analysis\nAI-powered COVID-19 detection from chest X-rays using deep learning."
-    }
+        "Get Help": "https://github.com/Sayemahamed/AI-Lab-Project",
+        "Report a bug": "mailto:sayemahamed183@gmail.com",
+        "About": "# COVID-19 X-Ray Analysis\nAI-powered COVID-19 detection from chest X-rays using deep learning.",
+    },
 )
 
 # Custom theme and styles
-st.markdown("""
+st.markdown(
+    """
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     
@@ -201,9 +202,12 @@ st.markdown("""
         color: var(--primary-dark);
     }
     </style>
-    """, unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True,
+)
 
 # --- New Model Classes from Untitled-1.py ---
+
 
 class CLAHETransform:
     def __init__(self, clip_limit=2.0, tile_grid_size=(8, 8)) -> None:
@@ -320,128 +324,134 @@ class Covid_Net(nn.Module):
         x = self.global_pool(x)
         return self.classifier(x)
 
+
 # Load and prepare model
 @st.cache_resource
 def load_model():
     try:
         # Initialize the new model architecture
         model = Covid_Net(kernel_sizes=[3, 5, 7], number_of_classes=1)
-        
+
         # Load weights
         # Note: Standardizing to 'model.pth' as the expected filename in deployment
-        state_dict = torch.load('model_weights/model.pth', map_location='cpu')
-        
+        state_dict = torch.load("model_weights/model.pth", map_location="cpu")
+
         # Remove any module. prefix if present
         if isinstance(state_dict, dict):
-             # Check if it's the full state dict or just the map
-            state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
+            # Check if it's the full state dict or just the map
+            state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
             model.load_state_dict(state_dict)
         else:
-             st.warning("Model file format unexpected, attempting direct load")
-             model = state_dict # Fallback if user saved entire model object
-             
+            st.warning("Model file format unexpected, attempting direct load")
+            model = state_dict  # Fallback if user saved entire model object
+
         model.eval()
         return model
     except Exception as e:
         st.error(f"Error loading model: {str(e)}")
         return None
 
+
 model = load_model()
 
 # Image transformation pipeline
 # Updated to match Untitled-1.py training pipeline
-transform = transforms.Compose([
-    CLAHETransform(clip_limit=2.0, tile_grid_size=(8, 8)),
-    transforms.Resize((300, 300)),
-    transforms.ToTensor(),
-    # Note: Training didn't show explicit Normalize in the snippet I saw for Untitled-1.py 
-    # except in the previous code? 
-    # Wait, Untitled-1.py line 111 shows: CLAHE, Resize, ToTensor. No Normalize.
-    # So I will remove Normalize to match training data exactly.
-])
+transform = transforms.Compose(
+    [
+        CLAHETransform(clip_limit=2.0, tile_grid_size=(8, 8)),
+        transforms.Resize((300, 300)),
+        transforms.ToTensor(),
+        # Note: Training didn't show explicit Normalize in the snippet I saw for Untitled-1.py
+        # except in the previous code?
+        # Wait, Untitled-1.py line 111 shows: CLAHE, Resize, ToTensor. No Normalize.
+        # So I will remove Normalize to match training data exactly.
+    ]
+)
+
 
 def process_image(image):
     if model is None:
         st.error("Model not loaded properly. Please check the model file.")
         return None, 0
-        
+
     if not isinstance(image, Image.Image):
         image = Image.open(image)
-    
-    # Convert to RGB not strictly needed for CLAHE (it converts to Gray) 
+
+    # Convert to RGB not strictly needed for CLAHE (it converts to Gray)
     # but good for consistency with input handling
-    if image.mode != 'RGB':
-        image = image.convert('RGB')
-    
+    if image.mode != "RGB":
+        image = image.convert("RGB")
+
     try:
         image_tensor = transform(image)
         image_tensor = image_tensor.unsqueeze(0)  # Add batch dimension
-        
+
         with torch.inference_mode():
             output = model(image_tensor)
             # Binary classification: output is logits, use sigmoid
             probability = torch.sigmoid(output).item()
-            
+
             # Decide class based on threshold 0.5
             # In Untitled-1.py: title_str = config.target_disease if label_array == 1 else "Negative"
             # Assuming label 1 is COVID (Positive)
-            
+
             if probability > 0.5:
-                predicted_class = 0 # COVID (Positive) based on my logic below? 
+                predicted_class = 0  # COVID (Positive) based on my logic below?
                 # Wait, usually 1 is the 'Positive' class (COVID).
                 # Untitled-1.py: "title_str = config.target_disease if label_array == 1 else "Negative""
                 # So 1 -> COVID, 0 -> Normal/Negative.
-                
+
                 # In app.py OLD logic:
                 # if predicted_class == 1:  # Normal case
                 #     st.success("✅ Normal X-Ray")
                 # else:  # COVID case
-                
+
                 # I need to match the OLD app.py expected return values if I don't change the UI logic.
                 # OLD UI: if predicted_class == 1 (Normal).
-                
+
                 # NEW Model: 1 = COVID, 0 = Normal.
                 # So if prob > 0.5 (COVID), I should return something that indicates COVID.
                 # If I return 0 for COVID, and 1 for Normal, it matches the old check:
                 # "if predicted_class == 1: # Normal case"
-                
+
             # Interpretation based on ImageFolder structure:
             # Class 0: COVID
             # Class 1: Normal
             # The model outputs probability of Class 1 (Normal)
-            
+
             if probability > 0.5:
-                predicted_class = 1 # Normal
+                predicted_class = 1  # Normal
                 confidence = probability
             else:
-                predicted_class = 0 # COVID
+                predicted_class = 0  # COVID
                 confidence = 1 - probability
-        
+
         return predicted_class, confidence * 100, image_tensor[0]
     except Exception as e:
         st.error(f"Error during prediction: {str(e)}")
         return None, 0, None
+
 
 def main():
     # Sidebar content
     # Sidebar content
     with st.sidebar:
         st.image("assets/covid-19.jpg", width="stretch")
-        
+
         st.markdown("### 🏥 AI Diagnostic Assistant")
         st.info(
             "This AI tool assists medical professionals in screening for COVID-19 using chest X-rays."
         )
-        
+
         st.markdown("---")
-        
+
         st.markdown("### 📊 Dataset Statistics")
         col_a, col_b = st.columns(2)
         with col_a:
             st.metric("COVID", "3.6K", delta_color="inverse")
         with col_b:
             st.metric("Normal", "10K", delta_color="normal")
-            
+
         with st.expander("� Detailed Sources"):
             st.markdown("""
             **COVID-19 (3,616 images)**
@@ -457,13 +467,13 @@ def main():
         st.markdown("### 🧠 Model Info")
         st.caption("Architecture: Custom Covid_Net (ResNet-style)")
         with st.expander("�️ Technical Details"):
-             st.markdown("""
+            st.markdown("""
             - **Input**: 300x300 px
             - **Preprocessing**: CLAHE Enhancement
             - **Backbone**: Multi-Scale Residual Net
             - **Training Accuracy**: ~98%
             """)
-        
+
         st.markdown("### 📚 Reference")
         st.markdown("""
         *M.E.H. Chowdhury et al., IEEE Access, 2020.*  
@@ -495,87 +505,91 @@ def main():
 
     # Upload Section
     st.subheader("Upload X-Ray Image")
-    
+
     # Add input method selection
     input_method = st.radio(
         "Choose input method:",
         ["Upload File", "Use Camera"],
         horizontal=True,
-        help="Select how you want to input the X-ray image"
+        help="Select how you want to input the X-ray image",
     )
-    
+
     if input_method == "Upload File":
         image_source = st.file_uploader(
             "Choose a chest X-ray image",
             type=["png", "jpg", "jpeg"],
-            help="Upload a clear, front-view chest X-ray image in PNG or JPEG format"
+            help="Upload a clear, front-view chest X-ray image in PNG or JPEG format",
         )
     else:  # Camera option
         image_source = st.camera_input(
             "Take a picture of the X-ray",
-            help="Position the X-ray image clearly in front of the camera"
+            help="Position the X-ray image clearly in front of the camera",
         )
 
     if image_source:
         try:
             with st.spinner("Analyzing X-ray..."):
                 # Process image and get prediction
-                predicted_class, confidence, transformed_tensor = process_image(image_source)
-            
+                predicted_class, confidence, transformed_tensor = process_image(
+                    image_source
+                )
+
             if predicted_class is None:
                 st.stop()
-                
+
             # Create two columns for image and results
             col1, col2 = st.columns([1, 1], gap="medium")
-            
+
             with col1:
                 # Display images in tabs
                 tab1, tab2 = st.tabs(["Original X-Ray", "Processed Input"])
-                
+
                 image = Image.open(image_source)
                 with tab1:
                     st.image(
-                        image, 
-                        caption=f"{'Captured' if input_method == 'Use Camera' else 'Uploaded'} X-Ray ({time.strftime('%H:%M:%S')})", 
-                        width="stretch"
+                        image,
+                        caption=f"{'Captured' if input_method == 'Use Camera' else 'Uploaded'} X-Ray ({time.strftime('%H:%M:%S')})",
+                        width="stretch",
                     )
-                
+
                 with tab2:
                     if transformed_tensor is not None:
                         # Convert tensor to PIL Image for display
-                        # Transform creates a float tensor [0,1], need to scale for visibility if needed, 
+                        # Transform creates a float tensor [0,1], need to scale for visibility if needed,
                         # but ToPILImage handles float tensors [0,1] correctly.
                         trans_img = transforms.ToPILImage()(transformed_tensor)
                         st.image(
                             trans_img,
                             caption=f"Clahe + Resized ({trans_img.size})",
-                            width="stretch"
+                            width="stretch",
                         )
-            
+
             with col2:
                 # Create result container with custom styling
                 result_container = st.container()
-                
+
                 with result_container:
                     st.subheader("Analysis Results")
-                    
+
                     # Display prediction with appropriate styling
                     if predicted_class == 1:  # Normal case
                         st.success("✅ Normal X-Ray")
-                        recommendation = "No COVID-19 indicators detected in the X-ray image"
+                        recommendation = (
+                            "No COVID-19 indicators detected in the X-ray image"
+                        )
                         status_color = "green"
                     else:  # COVID case
                         st.error("⚠️ COVID-19 Indicators Detected")
                         recommendation = "Please seek immediate medical attention and consult a healthcare professional"
                         status_color = "red"
-                    
+
                     # Show confidence with progress bar
                     st.markdown(f"**Confidence Score:** {confidence:.1f}%")
-                    st.progress(confidence/100)
-                    
+                    st.progress(confidence / 100)
+
                     # Show recommendation
                     st.info(recommendation)
-                    
+
                     # Additional details
                     with st.expander("🔍 Detailed Analysis"):
                         st.markdown(f"""
@@ -583,13 +597,13 @@ def main():
                         - **Confidence**: {confidence:.1f}%
                         - **Model Version**: v1.0
                         - **Image Size**: {image.size}
-                        - **Analysis Time**: {time.strftime('%H:%M:%S')}
+                        - **Analysis Time**: {time.strftime("%H:%M:%S")}
                         """)
 
         except Exception as e:
             st.error(f"Error processing image: {str(e)}")
             st.info("Please ensure you've uploaded a valid chest X-ray image")
-    
+
     # Tips section
     with st.expander("💡 Tips for Best Results"):
         st.markdown("""
@@ -612,11 +626,15 @@ def main():
         """)
 
     # Footer
-    st.markdown("""
+    st.markdown(
+        """
     <div class="footer">
         <p>Built with ❤️ using PyTorch & Streamlit | <a href="https://github.com/Sayemahamed/AI-Lab-Project">GitHub</a> | <a href="mailto:sayemahamed183@gmail.com">Contact</a></p>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
+
 
 if __name__ == "__main__":
     main()
